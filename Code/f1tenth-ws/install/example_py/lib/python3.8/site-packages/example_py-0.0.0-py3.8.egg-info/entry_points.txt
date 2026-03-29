@@ -1,3 +1,0 @@
-[console_scripts]
-li4_node = example_py.example_py.li4:main
-

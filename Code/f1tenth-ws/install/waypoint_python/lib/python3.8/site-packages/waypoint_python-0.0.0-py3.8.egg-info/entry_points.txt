@@ -1,3 +1,0 @@
-[console_scripts]
-waypoints_logger = waypoint_python.waypoints_logger:main
-

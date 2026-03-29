@@ -1,2 +1,0 @@
-# generated from colcon_core/shell/template/command_prefix.sh.em
-. "/home/f1tenth/f1tenth-ws/install/vesc_msgs/share/vesc_msgs/package.sh"

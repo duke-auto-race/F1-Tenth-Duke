@@ -1,7 +1,0 @@
-[01m[K/home/william/sim_ws/src/ros2_21_tutorials-master/learning_node_cpp/src/node_helloworld_class.cpp:[m[K In constructor ‘[01m[KHelloWorldNode::HelloWorldNode()[m[K’:
-[01m[K/home/william/sim_ws/src/ros2_21_tutorials-master/learning_node_cpp/src/node_helloworld_class.cpp:21:17:[m[K [01;31m[Kerror: [m[K‘[01m[Ksleep[m[K’ was not declared in this scope
-   21 |                 [01;31m[Ksleep[m[K(1);                                        // 休眠控制循环时间
-      |                 [01;31m[K^~~~~[m[K
-make[2]: *** [CMakeFiles/node_helloworld_class.dir/build.make:63: CMakeFiles/node_helloworld_class.dir/src/node_helloworld_class.cpp.o] Error 1
-make[1]: *** [CMakeFiles/Makefile2:78: CMakeFiles/node_helloworld_class.dir/all] Error 2
-make: *** [Makefile:141: all] Error 2

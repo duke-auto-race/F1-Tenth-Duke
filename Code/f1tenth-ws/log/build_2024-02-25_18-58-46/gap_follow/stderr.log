@@ -1,4 +1,0 @@
-[01m[K/mnt/nvme0n1/f1tenth_ws/src/gap_follow/src/reactive_node.cpp:[m[K In member function ‘[01m[Kvoid ReactiveFollowGap::preprocess_lidar(sensor_msgs::msg::LaserScan_<std::allocator<void> >::ConstSharedPtr)[m[K’:
-[01m[K/mnt/nvme0n1/f1tenth_ws/src/gap_follow/src/reactive_node.cpp:35:27:[m[K [01;35m[Kwarning: [m[Kcomparison of integer expressions of different signedness: ‘[01m[Kint[m[K’ and ‘[01m[Kstd::vector<float>::size_type[m[K’ {aka ‘[01m[Klong unsigned int[m[K’} [[01;35m[K-Wsign-compare[m[K]
-   35 |         for (int i = 0; [01;35m[Ki < scan_msg->ranges.size()[m[K; i++) {
-      |                         [01;35m[K~~^~~~~~~~~~~~~~~~~~~~~~~~~[m[K
