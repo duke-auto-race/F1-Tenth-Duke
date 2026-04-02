@@ -5,8 +5,10 @@ import sys
 import cvxpy
 import numpy as np
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from ackermann_msgs.msg import AckermannDrive, AckermannDriveStamped
 from geometry_msgs.msg import PoseStamped, Point
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from scipy.linalg import block_diag
 from scipy.sparse import block_diag, csc_matrix, diags
@@ -29,17 +31,17 @@ class mpc_config:
     # ---------------------------------------------------
     # You may need to tune the following matrices
     Rk: list = field(
-        default_factory=lambda: np.diag([0.01, 25.0])
+        default_factory=lambda: np.diag([0.01, 80.0])
     )  # input cost matrix, penalty for inputs - [accel, steering_speed]
     Rdk: list = field(
-        default_factory=lambda: np.diag([0.01, 55.0])
+        default_factory=lambda: np.diag([0.02, 220.0])
     )  # input difference cost matrix, penalty for change of inputs - [accel, steering_speed]
     Qk: list = field(
         # default_factory=lambda: np.diag([13.5, 13.5, 5.5, 13.0])
-        default_factory=lambda: np.diag([100, 100, 0.12, 0.9])
+        default_factory=lambda: np.diag([25.0, 25.0, 0.12, 0.8])
     )  # state error cost matrix, for the the next (T) prediction time steps [x, y, delta, v, yaw, yaw-rate, beta]
     Qfk: list = field(
-        default_factory=lambda: np.diag([100, 100, 0.12, 0.9])
+        default_factory=lambda: np.diag([25.0, 25.0, 0.12, 0.8])
     )  # final state error matrix, penalty  for the final state constraints: [x, y, delta, v, yaw, yaw-rate, beta]
     # --------------------------------------------------
     #([100.0, 100.0, 0.12, 0.9])
@@ -57,9 +59,9 @@ class mpc_config:
     MIN_STEER: float = -0.4189  # maximum steering angle [rad]
     MAX_STEER: float = 0.4189  # maximum steering angle [rad]
     MAX_DSTEER: float = np.deg2rad(180.0)  # maximum steering speed [rad/s]
-    MAX_SPEED: float = 6.0  # maximum speed [m/s]
+    MAX_SPEED: float = 2.0  # maximum speed [m/s]
     MIN_SPEED: float = 0.0  # minimum backward speed [m/s]
-    MAX_ACCEL: float = 3.0  # maximum acceleration [m/ss]
+    MAX_ACCEL: float = 0.8  # maximum acceleration [m/ss]
     # MAX_ERROR: float = 100  # maximum error placement to reference trajectory[m]
 
 @dataclass
@@ -81,7 +83,8 @@ class MPC(Node):
         # Create ROS subscribers and publishers 
         # Initialize the trajectory recording matrix and the directory to save
         self.trajectory_data = []  # List to store trajectory data
-        self.output_directory = "/home/william/sim_ws/src/f1tenth_mpc-main/mpc/waypoints"  # Set the output directory
+        self.share_directory = get_package_share_directory("mpc")
+        self.output_directory = os.path.join(self.share_directory, "waypoints")
         
         # publishers
         self.drive_pub_ = self.create_publisher(AckermannDriveStamped, '/drive', 1) 
@@ -90,10 +93,13 @@ class MPC(Node):
         self.waypoints_vis_pub_ = self.create_publisher(MarkerArray, "/waypoints", 1)
 
         # subscribers
-        self.pose_sub_ = self.create_subscription(PoseStamped, '/pf/viz/inferred_pose', self.pose_callback, 1)
+        self.declare_parameter("pose_topic", "/ego_racecar/odom")
+        self.pose_topic = self.get_parameter("pose_topic").get_parameter_value().string_value
+        self.pose_sub_ = self.create_subscription(Odometry, self.pose_topic, self.pose_callback, 1)
      
         # Get waypoints here make sure you save the file in correct directory
-        self.declare_parameter("waypoints_path", "/home/william/sim_ws/src/f1tenth_mpc-main/mpc/waypoints/Hudson1(copy).csv") #Hudson1
+        default_waypoints_path = os.path.join(self.output_directory, "Melbourne_map_mpc.csv")
+        self.declare_parameter("waypoints_path", default_waypoints_path)
         self.waypoints_path = self.get_parameter("waypoints_path").get_parameter_value().string_value
         print("waypoints path:", self.waypoints_path)
         self.waypoints_vis = MarkerArray()
@@ -111,7 +117,7 @@ class MPC(Node):
     # This function is for recording trajectory of the vehicle to evaluate the performance of the MPC controller
     # Comment it out if you don't need, and correct the main 
     def write_trajectory_to_csv(self):
-        filename = os.path.join(self.output_directory, 'trajectory_william_speed4396.csv')
+        filename = os.path.join(self.output_directory, 'trajectory_recorded.csv')
         with open(filename, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['x', 'y'])
@@ -121,11 +127,16 @@ class MPC(Node):
     def pose_callback(self, pose_msg):
 
         # Extract pose from ROS msg
-        xp = pose_msg.pose.position.x
-        yp = pose_msg.pose.position.y
+        xp = pose_msg.pose.pose.position.x
+        yp = pose_msg.pose.pose.position.y
 
         # Quaternion to Euler 
-        q = [pose_msg.pose.orientation.x, pose_msg.pose.orientation.y, pose_msg.pose.orientation.z, pose_msg.pose.orientation.w]
+        q = [
+            pose_msg.pose.pose.orientation.x,
+            pose_msg.pose.pose.orientation.y,
+            pose_msg.pose.pose.orientation.z,
+            pose_msg.pose.pose.orientation.w,
+        ]
         # num = 2 * (q[0] * q[1] + q[2] * q[3]) 
         # den = 1 - 2 * (q[1] * q[1] + q[2] * q[2])
         # yawp = atan2(num, den)
@@ -133,11 +144,13 @@ class MPC(Node):
         quat = Rotation.from_quat(q)
         euler = quat.as_euler("zxy", degrees=False)
         # yawp = euler[0]
-        yawp = euler[0] + 2*math.pi # handle angle wrap around
+        yawp = euler[0]
 
-        # lin_speed = [pose_msg.twist.twist.x, pose_msg.twist.twist.y, pose_msg.twist.twist.z]
-        # vp = LA.norm(lin_speed, 2)
-        vp = 1.0
+        lin_speed = [
+            pose_msg.twist.twist.linear.x,
+            pose_msg.twist.twist.linear.y,
+        ]
+        vp = max(LA.norm(lin_speed, 2), 0.2)
         vehicle_state = State(x=xp, y=yp, v=vp, yaw=yawp)
 
         # Calculate the next reference trajectory for the next T steps
@@ -170,11 +183,11 @@ class MPC(Node):
         drive_msg = AckermannDriveStamped()
         # Handle the angle wrap around
         drive_msg.drive.steering_angle = self.odelta_v[0]
-        drive_msg.drive.speed = vehicle_state.v + self.oa[0] * self.config.DTK
+        drive_msg.drive.speed = max(vehicle_state.v + self.oa[0] * self.config.DTK, 0.3)
         self.drive_pub_.publish(drive_msg)
         self.trajectory_data.append([
-        pose_msg.pose.position.x,
-        pose_msg.pose.position.y,
+        pose_msg.pose.pose.position.x,
+        pose_msg.pose.pose.position.y,
         ]) 
         
     
@@ -312,13 +325,14 @@ class MPC(Node):
         #       self.xk, self.x0k, self.config.MAX_SPEED, self.config.MIN_SPEED,
         #       self.uk, self.config.MAX_ACCEL, self.config.MAX_STEER
         constraints += [
-            self.xk[2, :] <= self.config.MAX_SPEED*2.5, # max speed
+            self.xk[2, :] <= self.config.MAX_SPEED, # max speed
             self.xk[2, :] >= self.config.MIN_SPEED, # min speed
             self.xk[:, 0] == self.x0k, # initial state
-            self.uk[0, :] <= self.config.MAX_ACCEL*7, # max acceleration
+            self.uk[0, :] <= self.config.MAX_ACCEL, # max acceleration
             self.uk[0, :] >= -self.config.MAX_ACCEL, # min acceleration
             # self.uk[0, :] >= 0, # min acceleration
             self.uk[1, :] <= self.config.MAX_STEER, # max steering
+            self.uk[1, :] >= self.config.MIN_STEER, # min steering
             
             # new try constraints
             #self.xk[0, :] -self.ref_traj_k[0,:] <= 10, # new constraints
@@ -375,11 +389,11 @@ class MPC(Node):
         ref_traj[1, :] = cy[ind_list]
         ref_traj[2, :] = sp[ind_list]
         # changed 4.5 in all of the following to pi
-        cyaw[cyaw - state.yaw > math.pi] = np.abs(
-            cyaw[cyaw - state.yaw > math.pi] - (2 * np.pi)
+        cyaw[cyaw - state.yaw > math.pi] = (
+            cyaw[cyaw - state.yaw > math.pi] - 2 * np.pi
         )
-        cyaw[cyaw - state.yaw < -math.pi] = np.abs(
-            cyaw[cyaw - state.yaw < -math.pi] + (2 * np.pi)
+        cyaw[cyaw - state.yaw < -math.pi] = (
+            cyaw[cyaw - state.yaw < -math.pi] + 2 * np.pi
         )
         ref_traj[3, :] = cyaw[ind_list]
         
