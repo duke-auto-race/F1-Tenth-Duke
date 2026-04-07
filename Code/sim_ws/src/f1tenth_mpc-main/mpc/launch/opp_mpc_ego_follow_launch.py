@@ -48,7 +48,7 @@ def generate_launch_description():
                 'max_accel': 1.0,
                 'wall_stop_distance': 0.45,
                 'wall_slow_distance': 0.8,
-                'side_wall_distance': 0.55,
+                'side_wall_distance': 0.6,
             }],
             output='screen',
         ),

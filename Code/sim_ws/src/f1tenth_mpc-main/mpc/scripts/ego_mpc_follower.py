@@ -62,7 +62,7 @@ class EgoMPCFollower(Node):
         self.declare_parameter('scan_topic', '/scan')
         self.declare_parameter('wall_stop_distance', 0.45)
         self.declare_parameter('wall_slow_distance', 0.8)
-        self.declare_parameter('side_wall_distance', 0.55)
+        self.declare_parameter('side_wall_distance', 0.6)
 
         ego_topic = self.get_parameter('ego_odom_topic').value
         target_topic = self.get_parameter('target_odom_topic').value
